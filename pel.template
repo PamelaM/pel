@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/2.0.7/css/dataTables.bootstrap5.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/keytable/2.12.0/css/keyTable.bootstrap5.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/searchpanes/2.3.1/css/searchPanes.bootstrap5.css" rel="stylesheet">
+    <link href="pel.css" rel="stylesheet">
+
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.js"></script>
+    <script src="https://cdn.datatables.net/2.0.7/js/dataTables.js"></script>
+    <script src="https://cdn.datatables.net/2.0.7/js/dataTables.bootstrap5.js"></script>
+    <script src="https://cdn.datatables.net/keytable/2.12.0/js/dataTables.keyTable.js"></script>
+    <script src="https://cdn.datatables.net/searchpanes/2.3.1/js/dataTables.searchPanes.js"></script>
+    <script src="https://cdn.datatables.net/searchpanes/2.3.1/js/searchPanes.bootstrap5.js"></script>
+
+  <script>
+    // Because the JS libraries are all loaded with "defer", we need to wait
+    // until the 'DOMContentLoaded' event before jquery will be available
+    document.addEventListener('DOMContentLoaded', () => {
+      $(document).ready(function () {
+        var table = $('#pel').DataTable({
+            "order": [[1, "asc"]],
+            "pageLength": 25,
+            "columnDefs": [
+            {{ column_defs }}
+            ],
+            initComplete: function () {
+                this.api()
+                    .columns()
+                    .every(function () {
+                        let column = this;
+                        let title = column.footer().textContent;
+
+                        // Create input element
+                        let input = document.createElement('input');
+                        input.placeholder = title;
+                        column.footer().replaceChildren(input);
+
+                        // Event listener for user input
+                        input.addEventListener('keyup', () => {
+                            if (column.search() !== this.value) {
+                                column.search(input.value).draw();
+                            }
+                        });
+                    });
+            }
+        });
+        $('a.toggle-vis').on('click', function (e) {
+            e.preventDefault();
+
+            // Get the column API object
+            var column = table.column($(this).attr('data-column'));
+
+            // Toggle the visibility
+            column.visible(!column.visible());
+        });
+      });
+    });
+
+  </script>
+  <title>HISTORICON® 2024 PEL</title>
+</head>
+<body>
+<div><strong>HISTORICON® 2024 PEL</strong></div>
+<div>
+Toggle column: {{ column_toggles }}
+</div>
+
+<table id="pel" class="table table-striped" style="width:100%">
+    <thead>
+    <tr>
+        {{ table_header }}
+    </tr>
+    </thead>
+    <tbody>
+        {{ table_rows }}
+    </tbody>
+    <tfoot>
+    <tr>
+        {{ table_header }}
+    </tr>
+    </tfoot>
+</table>
+</body>
+</html>
