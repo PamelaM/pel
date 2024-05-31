@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>HISTORICON® 2024 PEL</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/2.0.7/css/dataTables.bootstrap5.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/keytable/2.12.0/css/keyTable.bootstrap5.css" rel="stylesheet">
@@ -25,6 +25,7 @@
         var table = $('#pel').DataTable({
             "order": [[1, "asc"]],
             "pageLength": 25,
+            stateSave: true,
             "columnDefs": [
             {{ column_defs }}
             ],
@@ -47,8 +48,42 @@
                             }
                         });
                     });
+
+                const pel_interested_str = localStorage.getItem("pel-interested");
+                console.log("PEL: " + pel_interested_str);
+                if (pel_interested_str) {
+                    const pel_interested = JSON.parse(pel_interested_str);
+                    for (event_id of pel_interested) {
+                        const check_id = "#chk-state-" + event_id;
+                        $(check_id).prop("checked", true);
+                    }
+                } else {
+                    localStorage.setItem("pel-interested", JSON.stringify([]));
+                }
+
+                $('.chk').on('click', function () {
+                    var pel_interested = JSON.parse(localStorage.getItem("pel-interested"));
+                    const is_checked = $(this).prop("checked");
+                    const event_id = $(this).prop("id").replace("chk-state-", "");
+                    console.log("Click: " + event_id);
+                    console.log("  checked : " + is_checked);
+                    const index = pel_interested.indexOf(event_id);
+                    if (is_checked) {
+                        if (index == -1) {
+                            pel_interested.push(event_id);
+                        }
+                    } else {
+                        if (index != -1) {
+                            pel_interested = pel_interested.splice(index, 1);
+                        }
+                    }
+                    localStorage.setItem("pel-interested", JSON.stringify(pel_interested));
+                    consol.log("PEL: " + localStorage.getItem("pel-interested"));
+                });
             }
         });
+
+
         $('a.toggle-vis').on('click', function (e) {
             e.preventDefault();
 
@@ -58,11 +93,11 @@
             // Toggle the visibility
             column.visible(!column.visible());
         });
+
       });
     });
 
   </script>
-  <title>HISTORICON® 2024 PEL</title>
 </head>
 <body>
 <div><strong>HISTORICON® 2024 PEL</strong></div>

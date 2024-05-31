@@ -1,6 +1,7 @@
 import re
 from collections import defaultdict
 import requests
+import json
 import fitz
 
 SEPARATORS = ["Players", "Location", "GM", "Sponsor", "Prize", "Period", "Scale", "Rules", "Description"]
@@ -19,14 +20,6 @@ def import_pel_pdf():
     with open("pel2.txt", "w") as f:
         for page in doc:
             f.write(page.get_text())
-
-
-def read_choices():
-    with open("pel.choices") as f:
-        for line in f.read().splitlines():
-            event_id, who = line.split("::", 1)
-            print(event_id, who)
-            choices[event_id].add(who)
 
 
 class Event:
@@ -56,10 +49,7 @@ class Event:
             for idx, c in enumerate("WTFSZ"):
                 event_slot = event_slot.replace(c, str(idx))
             self.event_slot = event_slot
-            event_number = self.event_id.split(":")[-1].strip()
-            self.pam = "PMAYBE" if "pam" in choices.get(event_number, []) else ""
-            self.conall = "CMAYBE" if "conall" in choices.get(event_number, []) else ""
-            self.megan = "MMAYBE" if "megan" in choices.get(event_number, []) else ""
+            self.event_number = self.event_id.split(":")[-1].strip()
         except:
             print(len(lines), lines[0], self.text)
             raise
@@ -79,11 +69,10 @@ class Event:
         name = " ".join(name.split(None))
         name = name.replace("— Theme Game", "<br/><em>— Theme Game</em>")
         desc_len = 300
-        other_cols = [self.pam,
-                      self.megan,
-                      self.conall,
-                      ]
+        checkbox = f"<input type='checkbox' class='chk' id='chk-state-{self.event_number}'/>"
+        check_state = f"<span id='interested-state-{self.event_number}'></span>"
         row = [
+            checkbox,
             "<br/>".join([self.event_slot, self.event_id, self.day, self.hour]),
             name,
             self.length,
@@ -142,23 +131,6 @@ periods = defaultdict(int)
 def pel_text_to_events():
     for event_lines in read_pel_event_lines():
         e = Event(event_lines)
-        if 0 and not (e.pam or e.megan or e.conall):
-            if "SciFi" in e.period:
-                continue
-            if "Science" in e.period:
-                continue
-            if "Fantasy" in e.period:
-                continue
-            if "Future" in e.period:
-                continue
-            if "Ancients" in e.period:
-                continue
-            if "WORLD of TANKS" in e.rules:
-                continue
-            if "Myth" in e.period:
-                continue
-            if "Modern" in e.period:
-                continue
         periods[e.period] += 1
         yield e
 
@@ -167,9 +139,8 @@ def write_pel_html():
     with open("pel.template") as f:
         html_template = f.read()
 
-    first_col_names = ["Pam", "Megan", "Conall", ]
     column_names = [
-        "ID/Time", "Name", "Length", "Players", "Location",
+        "", "ID/Time", "Name", "Length", "Players", "Location",
         "GM", "Period", "Scale", "Rules", "Description", "Sponsor", "Prize",
     ]
     table_header = "".join(
@@ -192,12 +163,22 @@ def write_pel_html():
     table_rows = "\n".join(table_rows)
     html_text = html_text.replace("{{ table_rows }}", table_rows)
 
-    hidden_cols = ["Megan", "Conall", "Location", 'Sponsor', 'Prize']
+    hidden_cols = ["Location", 'Sponsor', 'Prize']
     column_defs = [
-        f'visible: {str(bool(col not in hidden_cols)).lower()}, targets: {idx}'
-        for idx, col in enumerate(column_names)
+        {
+            'orderable': False,
+            'className': 'select-checkbox',
+            'targets': 0
+        }
     ]
-    column_defs = "\n".join("{" + cd + "}," for cd in column_defs).rstrip(",")
+    column_defs.extend([
+        {
+            'visible': bool(col not in hidden_cols),
+            'targets': idx,
+        }
+        for idx, col in enumerate(column_names, 1)
+    ])
+    column_defs = json.dumps(column_defs)
     html_text = html_text.replace("{{ column_defs }}", column_defs)
 
     with open("pel.html", "w") as f:
@@ -208,9 +189,8 @@ if __name__ == "__main__":
     import sys
     if "import" in sys.argv:
         import_pel_pdf()
-    read_choices()
     write_pel_html()
 
-    for n, p in sorted([(n, p) for p, n in periods.items()], reverse=True):
-        print(f"{n:3}  {p}")
+    #for n, p in sorted([(n, p) for p, n in periods.items()], reverse=True):
+    #    print(f"{n:3}  {p}")
 
