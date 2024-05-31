@@ -3,12 +3,10 @@ from collections import defaultdict
 import requests
 import json
 import fitz
+from string import Template
 
 SEPARATORS = ["Players", "Location", "GM", "Sponsor", "Prize", "Period", "Scale", "Rules", "Description"]
 pattern = re.compile("(Wednesday|Thursday|Friday|Saturday|Sunday)")
-
-choices = defaultdict(set)
-
 
 def import_pel_pdf():
     url = "https://cdn.ymaws.com/www.hmgs.org/resource/resmgr/historicon/pels/2024_historicon_pel_5-25-24.pdf"
@@ -135,33 +133,28 @@ def pel_text_to_events():
         yield e
 
 
-def write_pel_html():
-    with open("pel.template") as f:
-        html_template = f.read()
-
+def create_context():
+    ctx = {}
     column_names = [
         "", "ID/Time", "Name", "Length", "Players", "Location",
         "GM", "Period", "Scale", "Rules", "Description", "Sponsor", "Prize",
     ]
-    table_header = "".join(
+    ctx['table_header'] = "".join(
         f"<th>{v}</th>"
         for v in column_names
     )
-    html_text = html_template.replace("{{ table_header }}", table_header)
 
     column_toggles = [
         f'<a class="toggle-vis" data-column="{idx}">{v}</a>'
         for idx, v in enumerate(column_names)
     ]
-    column_toggles = " - ".join(column_toggles)
-    html_text = html_text.replace("{{ column_toggles }}", column_toggles)
+    ctx['column_toggles'] = " - ".join(column_toggles)
 
     table_rows = [
         e.as_table_row()
         for e in pel_text_to_events()
     ]
-    table_rows = "\n".join(table_rows)
-    html_text = html_text.replace("{{ table_rows }}", table_rows)
+    ctx['table_rows'] = "\n".join(table_rows)
 
     hidden_cols = ["Location", 'Sponsor', 'Prize']
     column_defs = [
@@ -178,8 +171,16 @@ def write_pel_html():
         }
         for idx, col in enumerate(column_names, 1)
     ])
-    column_defs = json.dumps(column_defs)
-    html_text = html_text.replace("{{ column_defs }}", column_defs)
+    ctx['column_defs'] = json.dumps(column_defs)
+    return ctx
+
+
+def write_pel_html():
+    with open("pel.template") as f:
+        html_template = Template(f.read())
+
+    ctx = create_context()
+    html_text = html_template.substitute(ctx)
 
     with open("pel.html", "w") as f:
         f.write(html_text)
@@ -190,7 +191,3 @@ if __name__ == "__main__":
     if "import" in sys.argv:
         import_pel_pdf()
     write_pel_html()
-
-    #for n, p in sorted([(n, p) for p, n in periods.items()], reverse=True):
-    #    print(f"{n:3}  {p}")
-
