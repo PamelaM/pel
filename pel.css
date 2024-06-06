@@ -3,3 +3,8 @@ tfoot input {
     padding: 3px;
     box-sizing: border-box;
 }
+
+div.main {
+    padding: 4px;
+    margin: 4px;
+}
