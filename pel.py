@@ -8,6 +8,12 @@ from string import Template
 SEPARATORS = ["Players", "Location", "GM", "Sponsor", "Prize", "Period", "Scale", "Rules", "Description"]
 pattern = re.compile("(Wednesday|Thursday|Friday|Saturday|Sunday)")
 
+TIME_SLOTS = set()
+for d in "WTFSZ":
+    for n in range(9, 25):
+        TIME_SLOTS.add(f"{d}{n:02}")
+
+
 def import_pel_pdf():
     url = "https://cdn.ymaws.com/www.hmgs.org/resource/resmgr/historicon/pels/2024_historicon_pel_5-25-24.pdf"
     response = requests.get(url)
@@ -43,12 +49,19 @@ class Event:
             self.scale = self.next()
             self.rules = self.next()
             self.description = self.next()
-            event_slot = self.event_id.split(":")[0].strip()
+            time_slot = event_slot = self.event_id.split(":")[0].strip()
             for idx, c in enumerate("WTFSZ"):
                 event_slot = event_slot.replace(c, str(idx))
             self.event_slot = event_slot
             self.event_number = self.event_id.split(":")[-1].strip()
-        except:
+            start_hour = int(time_slot[1:])
+            day_letter = time_slot[0]
+            duration = round(float(self.length.split(None)[0]) + 0.5)
+            self.time_slots = [
+                f"{day_letter}{(start_hour + idx):02d}"
+                for idx in range(duration)
+            ]
+        except Exception:
             print(len(lines), lines[0], self.text)
             raise
 
@@ -60,36 +73,6 @@ class Event:
             value, self.text = self.text.split(f" {sep}: ")
             val = value.strip(",").strip()
         return "" if val == "NONE" else val
-
-    def as_table_row(self):
-        name = self.name.replace("ThemeGame", "Theme Game")
-        name = name.replace("—", " — ")
-        name = " ".join(name.split(None))
-        name = name.replace("— Theme Game", "<br/><em>— Theme Game</em>")
-        desc_len = 300
-        checkbox = f"<input type='checkbox' class='chk' id='chk-state-{self.event_number}'/>"
-        check_state = f"<span id='interested-state-{self.event_number}'></span>"
-        row = [
-            checkbox,
-            "<br/>".join([self.event_slot, self.event_id, self.day, self.hour]),
-            name,
-            self.length,
-            self.players,
-            self.location.replace(":", "<br/>"),
-            self.GM.replace(" & ", " &<br/>"),
-            self.period,
-            self.scale,
-            self.rules,
-            self.description,  # -- [:desc_len] + " ..." if len(self.description) > (desc_len+3) else self.description,
-            self.sponsor,
-            self.prize,
-        ]
-        row = [
-            f"<td>{v}</td>"
-            for v in row
-        ]
-        row = "".join(row)
-        return f"<tr>{row}</tr>"
 
 
 def read_pel_lines():
@@ -107,15 +90,10 @@ def read_pel_lines():
 def read_pel_event_lines():
     event_lines = []
 
-    slots = set()
-    for d in "WTFSZ":
-        for n in range(9, 25):
-            slots.add(f"{d}{n:02}")
-
     for line in read_pel_lines():
         line = line.strip()
         start = line.split(":", 1)[0]
-        if len(start) == 3 and start in slots and event_lines:
+        if len(start) == 3 and start in TIME_SLOTS and event_lines:
             yield event_lines
             event_lines = []
         event_lines.append(line)
@@ -133,45 +111,91 @@ def pel_text_to_events():
         yield e
 
 
+def event_to_table_row(evt):
+    name = evt.name.replace("ThemeGame", "Theme Game")
+    name = name.replace("—", " — ")
+    name = " ".join(name.split(None))
+    name = name.replace("— Theme Game", "<br/><em>— Theme Game</em>")
+    checkbox = f"<input type='checkbox' class='chk' id='chk-state-{evt.event_number}'/>"
+    data = [
+        checkbox,
+        "<br/>".join([evt.event_slot, evt.event_id, evt.day, evt.hour]),
+        name,
+        evt.length,
+        evt.players,
+        evt.location.replace(":", "<br/>"),
+        evt.GM.replace(" & ", " &<br/>"),
+        evt.period,
+        evt.scale,
+        evt.rules,
+        evt.description,
+        evt.sponsor,
+        evt.prize,
+        'PELNOTSELECTED',
+        ' '.join(evt.time_slots),
+    ]
+    cells = [
+        f"<td>{v}</td>"
+        for v in data
+    ]
+    cells[-2] = cells[-2].replace("<td>", f"<td id='hidden-{evt.event_number}'>")
+    cells[-1] = cells[-1].replace("<td>", f"<td id='time-slots-{evt.event_number}'>")
+    row = "".join(cells)
+    return f"<tr id='evt-{evt.event_number}'>{row}</tr>"
+
+
 def create_context():
     ctx = {}
     column_names = [
         "", "ID/Time", "Name", "Length", "Players", "Location",
         "GM", "Period", "Scale", "Rules", "Description", "Sponsor", "Prize",
+        "hidden-selected", "hidden-time-slots"
     ]
+    hidden_cols = ["Location", 'Sponsor', 'Prize', 'hidden-selected', 'hidden-time-slots']
+
     ctx['table_header'] = "".join(
         f"<th>{v}</th>"
         for v in column_names
     )
 
-    column_toggles = [
-        f'<a class="toggle-vis" data-column="{idx}">{v}</a>'
-        for idx, v in enumerate(column_names)
-    ]
-    ctx['column_toggles'] = " - ".join(column_toggles)
+    def active_class(col_name):
+        if col_name in hidden_cols:
+            return ""
+        else:
+            return "active"
 
-    table_rows = [
-        e.as_table_row()
-        for e in pel_text_to_events()
+    column_toggles = [
+        f'<button type="button" class="btn btn-outline-secondary btn-sm toggle-vis {active_class(v)}" data-column="{idx}" aria-pressed="true">{v}</button>'
+        for idx, v in enumerate(column_names[1:-2], 1)
     ]
+    ctx['column_toggles'] = " ".join(column_toggles)
+
+    table_rows = [event_to_table_row(e) for e in pel_text_to_events()]
     ctx['table_rows'] = "\n".join(table_rows)
 
-    hidden_cols = ["Location", 'Sponsor', 'Prize']
     column_defs = [
-        {
-            'orderable': False,
-            'className': 'select-checkbox',
-            'targets': 0
-        }
-    ]
-    column_defs.extend([
         {
             'visible': bool(col not in hidden_cols),
             'targets': idx,
+            'name_': col,
+            'searchable': True,
         }
-        for idx, col in enumerate(column_names, 1)
-    ])
-    ctx['column_defs'] = json.dumps(column_defs)
+        for idx, col in enumerate(column_names)
+    ]
+    column_defs[0]['orderable'] = False
+    column_defs[0]['searchable'] = False
+    column_defs[0]['name_'] = 'checkbox'
+
+    column_defs[-2]['orderable'] = False
+    column_defs[-1]['orderable'] = False
+
+    ctx['column_defs'] = json.dumps(
+        column_defs,
+        sort_keys=True,
+        indent=4,
+    )
+
+    ctx['TIME_SLOTS'] = json.dumps(list(TIME_SLOTS))
     return ctx
 
 

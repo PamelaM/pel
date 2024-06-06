@@ -19,94 +19,234 @@
     <script src="https://cdn.datatables.net/searchpanes/2.3.1/js/searchPanes.bootstrap5.js"></script>
 
   <script>
-    // Because the JS libraries are all loaded with "defer", we need to wait
-    // until the 'DOMContentLoaded' event before jquery will be available
+    var num_footers = 0;
+    var avail_time_slots = $TIME_SLOTS;
+
+    function remove_time_slots(time_slots) {
+        for (time_slot of time_slots) {
+            const index = avail_time_slots.indexOf(time_slot);
+            if (index != -1) {
+                avail_time_slots.splice(index, 1);
+            }
+        }
+    }
+
+    function add_time_slots(time_slots) {
+        for (time_slot of time_slots) {
+            const index = avail_time_slots.indexOf(time_slot);
+            if (index == -1) {
+                avail_time_slots.push(time_slot);
+            }
+        }
+    }
+
+    function make_footer_search_box(column) {
+        let title = column.footer().textContent;
+
+        // Create input element
+        let input = document.createElement('input');
+        input.placeholder = title;
+        num_footers += 1;
+        input.id = "foot-search-" + num_footers;
+        column.footer().replaceChildren(input);
+
+        // Event listener for user input
+        input.addEventListener('keyup', () => {
+            const col_search = column.search();
+            const col_val = column.value;
+            const input_val = input.value;
+            if (column.search() !== input.value) {
+                column.search(input.value).draw();
+            }
+        });
+    }
+
+    function read_selections() {
+        let pel_selections = null;
+        const pel_selections_str = localStorage.getItem("pel-selections");
+        console.log("PEL Selections READ: " + pel_selections_str);
+        if (pel_selections_str) {
+            pel_selections = JSON.parse(pel_selections_str);
+        }
+        return pel_selections;
+    }
+
+    function write_selections(pel_selections) {
+        if (pel_selections === null) {
+            pel_selections = [];
+        }
+        console.log("PEL Selections WRITE: " + pel_selections);
+        const pel_selections_str = JSON.stringify(pel_selections);
+        localStorage.setItem("pel-selections", pel_selections_str);
+    }
+
+    function add_selection(event_id) {
+        console.log("Adding to pel_selections: " + event_id);
+        let pel_selections = read_selections();
+        const index = pel_selections.indexOf(event_id);
+        if (index == -1) {
+            pel_selections.push(event_id);
+            write_selections(pel_selections);
+        }
+    }
+
+    function remove_selection(event_id) {
+        console.log("Removing from pel_selections: " + event_id);
+        let pel_selections = read_selections();
+        const index = pel_selections.indexOf(event_id);
+        if (index != -1) {
+            pel_selections.splice(index, 1);
+            write_selections(pel_selections);
+        }
+    }
+
+    function init_selections() {
+        const pel_selections = read_selections();
+        if (pel_selections === null) {
+            write_selections([]);
+        } else {
+            update_selections(pel_selections);
+        }
+
+        $$('.chk').on('click', function () {
+            toggle_selection($$(this));
+        });
+    }
+
+    function update_selections(pel_selections) {
+        for (event_id of pel_selections) {
+            const check_id = "#chk-state-" + event_id;
+            $$(check_id).prop("checked", true);
+            const hidden_id = "#hidden-" + event_id;
+            const prev_val = $$(hidden_id).text();
+            $$(hidden_id).text("PELSELECTED");
+            const time_slots = $$("#hidden-time-slots-"+event_id).text().split(" ");
+            remove_time_slots(time_slots);
+        }
+    }
+
+    function toggle_selection (elem) {
+        const is_checked = elem.prop("checked");
+        const event_id = elem.prop("id").replace("chk-state-", "");
+        const table = $$("#pel").DataTable();
+        let hidden_value = "";
+
+
+        if (is_checked) {
+            add_selection(event_id);
+            hidden_value = "PELSELECTED";
+        } else {
+            remove_selection(event_id);
+            hidden_value = "PELNOTSELECTED";
+        }
+        if (table) {
+            const hidden_cell = table.cell("#hidden-" + event_id);
+            const prev_val = hidden_cell.data();
+            hidden_cell.data(hidden_value).draw();
+            const table_slots = table.cell("#time-slots-" + event_id).data().split(" ");
+            if (is_checked) {
+                remove_time_slots(time_slots);
+            } else {
+                add_time_slots(time_slots);
+            }
+        }
+    }
+
+    // We need to wait until the 'DOMContentLoaded' event before jquery will be available
     document.addEventListener('DOMContentLoaded', () => {
       $$(document).ready(function () {
+        init_selections();
+
         var table = $$('#pel').DataTable({
-            "order": [[1, "asc"]],
-            "pageLength": 25,
+            order: [[1, "asc"]],
+            pageLength: 25,
             stateSave: true,
-            "columnDefs": [
-            $column_defs
-            ],
+            columnDefs: $column_defs,
             initComplete: function () {
-                this.api()
-                    .columns()
-                    .every(function () {
-                        let column = this;
-                        let title = column.footer().textContent;
-
-                        // Create input element
-                        let input = document.createElement('input');
-                        input.placeholder = title;
-                        column.footer().replaceChildren(input);
-
-                        // Event listener for user input
-                        input.addEventListener('keyup', () => {
-                            if (column.search() !== this.value) {
-                                column.search(input.value).draw();
-                            }
-                        });
-                    });
-
-                const pel_interested_str = localStorage.getItem("pel-interested");
-                console.log("PEL: " + pel_interested_str);
-                if (pel_interested_str) {
-                    const pel_interested = JSON.parse(pel_interested_str);
-                    for (event_id of pel_interested) {
-                        const check_id = "#chk-state-" + event_id;
-                        $(check_id).prop("checked", true);
-                    }
-                } else {
-                    localStorage.setItem("pel-interested", JSON.stringify([]));
-                }
-
-                $('.chk').on('click', function () {
-                    var pel_interested = JSON.parse(localStorage.getItem("pel-interested"));
-                    const is_checked = $(this).prop("checked");
-                    const event_id = $(this).prop("id").replace("chk-state-", "");
-                    console.log("Click: " + event_id);
-                    console.log("  checked : " + is_checked);
-                    const index = pel_interested.indexOf(event_id);
-                    if (is_checked) {
-                        if (index == -1) {
-                            pel_interested.push(event_id);
-                        }
-                    } else {
-                        if (index != -1) {
-                            pel_interested = pel_interested.splice(index, 1);
-                        }
-                    }
-                    localStorage.setItem("pel-interested", JSON.stringify(pel_interested));
-                    consol.log("PEL: " + localStorage.getItem("pel-interested"));
+                console.log("initComplete: Calling make_footer_search_box")
+                this.api().columns().every(function (elem) {
+                    make_footer_search_box(this);
                 });
             }
         });
 
+        table.on('draw', function () {
+            const pel_selections = read_selections();
+            update_selections(pel_selections);
+        });
 
-        $$('a.toggle-vis').on('click', function (e) {
+        $$('button.toggle-vis').on('click', function (e) {
            e.preventDefault();
 
             // Get the column API object
             var column = table.column($$(this).attr('data-column'));
 
-            // Toggle the visibility
-            column.visible(!column.visible());
+            var col_visible = column.visible()
+            if (col_visible) {
+                $$(this).attr("aria-pressed", "false");
+                $$(this).removeClass("active");
+                column.visible(false);
+            } else {
+                $$(this).attr("aria-pressed", "true");
+                $$(this).addClass("active");
+                column.visible(true);
+            }
         });
+        if (false) {
+            $$('#show-selected-only').on('click', function () {
+                if ($$(this).hasClass("active")) {
+                    $$(this).removeClass("active");
+                    $$(this).attr("aria-pressed", "false");
+                } else {
+                    $$(this).addClass("active");
+                    $$(this).attr("aria-pressed", "true");
+                }
+            });
+            $$('#show-no-conflict').on('click', function () {
+                if ($$(this).hasClass("active")) {
+                    $$(this).removeClass("active");
+                    $$(this).attr("aria-pressed", "false");
+                } else {
+                    $$(this).addClass("active");
+                    $$(this).attr("aria-pressed", "true");
+                }
+            });
+            $$('.show-day').on('click', function () {
+                const this_day = $$(this).data("day");
 
+                if ($$(this).hasClass("active")) {
+                    $$(this).removeClass("active");
+                    $$(this).attr("aria-pressed", "false");
+                } else {
+                    $$(this).addClass("active");
+                    $$(this).attr("aria-pressed", "true");
+                }
+            });
+        } // end false stuff
       });
     });
 
   </script>
 </head>
 <body>
-<div><strong>HISTORICON® 2024 PEL</strong></div>
+<div class="main">
+<h2>HISTORICON® 2024 PEL</h2>
 <div>
-Toggle column: $column_toggles
+Column Visibility:</br>$column_toggles
 </div>
 
-<table id="pel" class="table table-striped" style="width:100%">
+<div class="d-none">
+<button type="button" class="btn btn-outline-secondary btn-sm" id="show-selected-only" aria-pressed="true">Show Selected Only</button>
+<button type="button" class="btn btn-outline-secondary btn-sm" id="show-no-conflict" aria-pressed="true">Show No Conflict</button>
+</br>
+<button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-wednesday" data-day="wednesday" aria-pressed="true">Wednesday</button>
+<button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-thursday" data-day="thursday" aria-pressed="true">Thursday</button>
+<button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-friday" data-day="friday" aria-pressed="true">Friday</button>
+<button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-saturday" data-day="saturday" aria-pressed="true">Saturday</button>
+<button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-sunday" data-day="sunday" aria-pressed="true">Sunday</button>
+</div>
+
+<table id="pel" class="table table-striped display" style="width:100%">
     <thead>
     <tr>
         $table_header
@@ -121,5 +261,6 @@ Toggle column: $column_toggles
     </tr>
     </tfoot>
 </table>
+</div>
 </body>
 </html>
