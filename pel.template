@@ -6,42 +6,21 @@
 
     <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/2.0.7/css/dataTables.bootstrap5.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/keytable/2.12.0/css/keyTable.bootstrap5.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/searchpanes/2.3.1/css/searchPanes.bootstrap5.css" rel="stylesheet">
     <link href="pel.css" rel="stylesheet">
 
     <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.js"></script>
     <script src="https://cdn.datatables.net/2.0.7/js/dataTables.js"></script>
     <script src="https://cdn.datatables.net/2.0.7/js/dataTables.bootstrap5.js"></script>
-    <script src="https://cdn.datatables.net/keytable/2.12.0/js/dataTables.keyTable.js"></script>
-    <script src="https://cdn.datatables.net/searchpanes/2.3.1/js/dataTables.searchPanes.js"></script>
-    <script src="https://cdn.datatables.net/searchpanes/2.3.1/js/searchPanes.bootstrap5.js"></script>
 
   <script>
     var num_footers = 0;
-    var avail_time_slots = $TIME_SLOTS;
-
-    function remove_time_slots(time_slots) {
-        for (time_slot of time_slots) {
-            const index = avail_time_slots.indexOf(time_slot);
-            if (index != -1) {
-                avail_time_slots.splice(index, 1);
-            }
-        }
-    }
-
-    function add_time_slots(time_slots) {
-        for (time_slot of time_slots) {
-            const index = avail_time_slots.indexOf(time_slot);
-            if (index == -1) {
-                avail_time_slots.push(time_slot);
-            }
-        }
-    }
+    var events = $events;
 
     function make_footer_search_box(column) {
         let title = column.footer().textContent;
+        const sval = column.search();
+        column.search('');
 
         // Create input element
         let input = document.createElement('input');
@@ -52,9 +31,6 @@
 
         // Event listener for user input
         input.addEventListener('keyup', () => {
-            const col_search = column.search();
-            const col_val = column.value;
-            const input_val = input.value;
             if (column.search() !== input.value) {
                 column.search(input.value).draw();
             }
@@ -88,6 +64,7 @@
             pel_selections.push(event_id);
             write_selections(pel_selections);
         }
+        return pel_selections;
     }
 
     function remove_selection(event_id) {
@@ -98,6 +75,7 @@
             pel_selections.splice(index, 1);
             write_selections(pel_selections);
         }
+        return pel_selections;
     }
 
     function init_selections() {
@@ -113,16 +91,36 @@
         });
     }
 
-    function update_selections(pel_selections) {
+    function set_cell_value(event_id, id_prefix, value, table) {
+        const cell_id = '#'+id_prefix+event_id;
+        let what = null;
+        if (table) {
+            table.cell(cell_id).data(value);
+        } else {
+            $$(cell_id).text(value);
+        }
+    }
+
+    function update_conflicts(pel_selections, table) {
         for (event_id of pel_selections) {
+            const evt = events[event_id];
+            for (conflict_id of evt.conflicts) {
+                set_cell_value(conflict_id, "hidden-conflicts-", "PELCONFLICTS", table);
+            }
+        }
+        for (event_id of pel_selections) {
+            set_cell_value(event_id, "hidden-conflicts-", "PELNOCONFLICTS", table);
+        }
+    }
+
+    function update_selections(pel_selections, table) {
+        for (event_id of pel_selections) {
+            // Set Selected Checkbox
             const check_id = "#chk-state-" + event_id;
             $$(check_id).prop("checked", true);
-            const hidden_id = "#hidden-" + event_id;
-            const prev_val = $$(hidden_id).text();
-            $$(hidden_id).text("PELSELECTED");
-            const time_slots = $$("#hidden-time-slots-"+event_id).text().split(" ");
-            remove_time_slots(time_slots);
+            set_cell_value(event_id, "hidden-selected-", "PELSELECTED", table);
         }
+        update_conflicts(pel_selections, table);
     }
 
     function toggle_selection (elem) {
@@ -130,26 +128,24 @@
         const event_id = elem.prop("id").replace("chk-state-", "");
         const table = $$("#pel").DataTable();
         let hidden_value = "";
-
+        const evt = events[event_id];
+        let pel_selections = null;
 
         if (is_checked) {
-            add_selection(event_id);
-            hidden_value = "PELSELECTED";
+            pel_selections =add_selection(event_id);
+            set_cell_value(event_id, "hidden-selected-", "PELSELECTED", table);
+            for (conflict_id of evt.conflicts) {
+                set_cell_value(conflict_id, "hidden-conflicts-", "PELCONFLICTS", table);
+            }
         } else {
-            remove_selection(event_id);
-            hidden_value = "PELNOTSELECTED";
-        }
-        if (table) {
-            const hidden_cell = table.cell("#hidden-" + event_id);
-            const prev_val = hidden_cell.data();
-            hidden_cell.data(hidden_value).draw();
-            const table_slots = table.cell("#time-slots-" + event_id).data().split(" ");
-            if (is_checked) {
-                remove_time_slots(time_slots);
-            } else {
-                add_time_slots(time_slots);
+            pel_selections = remove_selection(event_id);
+            set_cell_value(event_id, "hidden-selected-", "PELNOTSELECTED", table);
+            for (conflict_id of evt.conflicts) {
+                set_cell_value(conflict_id, "hidden-conflicts-", "PELNOCONFLICTS", table);
             }
         }
+        update_conflicts(pel_selections, table);
+        table.draw();
     }
 
     // We need to wait until the 'DOMContentLoaded' event before jquery will be available
@@ -162,18 +158,29 @@
             pageLength: 25,
             stateSave: true,
             columnDefs: $column_defs,
+            layout: {
+                top2Start: 'info',
+                top2End: 'search',
+                topStart: 'pageLength',
+                topEnd: 'paging',
+                bottomStart: 'pageLength',
+                bottomEnd: 'search',
+                bottom2Start: 'info',
+                bottom2End: 'paging'
+            },
             initComplete: function () {
                 console.log("initComplete: Calling make_footer_search_box")
                 this.api().columns().every(function (elem) {
                     make_footer_search_box(this);
                 });
+                this.api().draw();
             }
         });
 
-        table.on('draw', function () {
-            const pel_selections = read_selections();
-            update_selections(pel_selections);
-        });
+        // table.on('draw', function () {
+        //     const pel_selections = read_selections();
+        //     update_selections(pel_selections);
+        // });
 
         $$('button.toggle-vis').on('click', function (e) {
            e.preventDefault();
@@ -183,34 +190,29 @@
 
             var col_visible = column.visible()
             if (col_visible) {
-                $$(this).attr("aria-pressed", "false");
+                // $$(this).attr("aria-pressed", "false");
                 $$(this).removeClass("active");
                 column.visible(false);
             } else {
-                $$(this).attr("aria-pressed", "true");
+                // $$(this).attr("aria-pressed", "true");
                 $$(this).addClass("active");
                 column.visible(true);
             }
         });
+
+        $$('#show-selected-only').on('click', function () {
+            const is_active = $$(this).hasClass("active");
+            var column = table.column($hidden_selected_col_num);
+            const search_term = is_active ? "PELSELECTED" : "";
+            column.search(search_term).draw();
+        });
+        $$('#show-no-conflict').on('click', function () {
+            const is_active = $$(this).hasClass("active");
+            var column = table.column($hidden_conflicts_col_num);
+            const search_term = is_active ? "PELNOCONFLICTS" : "";
+            column.search(search_term).draw();
+        });
         if (false) {
-            $$('#show-selected-only').on('click', function () {
-                if ($$(this).hasClass("active")) {
-                    $$(this).removeClass("active");
-                    $$(this).attr("aria-pressed", "false");
-                } else {
-                    $$(this).addClass("active");
-                    $$(this).attr("aria-pressed", "true");
-                }
-            });
-            $$('#show-no-conflict').on('click', function () {
-                if ($$(this).hasClass("active")) {
-                    $$(this).removeClass("active");
-                    $$(this).attr("aria-pressed", "false");
-                } else {
-                    $$(this).addClass("active");
-                    $$(this).attr("aria-pressed", "true");
-                }
-            });
             $$('.show-day').on('click', function () {
                 const this_day = $$(this).data("day");
 
@@ -231,20 +233,26 @@
 <body>
 <div class="main">
 <h2>HISTORICON® 2024 PEL</h2>
-<div>
-Column Visibility:</br>$column_toggles
+<div class="btn-group" role="group" aria-label="Column Visibility">
+Column Visibility:<br/>
+$column_toggles
 </div>
 
-<div class="d-none">
-<button type="button" class="btn btn-outline-secondary btn-sm" id="show-selected-only" aria-pressed="true">Show Selected Only</button>
-<button type="button" class="btn btn-outline-secondary btn-sm" id="show-no-conflict" aria-pressed="true">Show No Conflict</button>
-</br>
+<div class="btn-group" role="group" aria-label="Special">
+Special:<br/>
+<button type="button" class="btn btn-sm btn-toggle btn-outline-secondary" data-bs-toggle="button" aria-pressed="false" autocomplete="off" id="show-selected-only">Show Selected Only</button>
+<button type="button" class="btn btn-sm btn-toggle btn-outline-secondary" data-bs-toggle="button" aria-pressed="false" autocomplete="off" id="show-no-conflict">Hide Conflicts</button>
+</div>
+<!--
+<div class="btn-group" role="group" aria-label="Days">
+Days:<br/>
 <button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-wednesday" data-day="wednesday" aria-pressed="true">Wednesday</button>
 <button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-thursday" data-day="thursday" aria-pressed="true">Thursday</button>
 <button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-friday" data-day="friday" aria-pressed="true">Friday</button>
 <button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-saturday" data-day="saturday" aria-pressed="true">Saturday</button>
 <button type="button" class="btn btn-outline-secondary btn-sm active show-day" id="show-sunday" data-day="sunday" aria-pressed="true">Sunday</button>
 </div>
+-->
 
 <table id="pel" class="table table-striped display" style="width:100%">
     <thead>
