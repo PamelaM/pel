@@ -19,8 +19,8 @@
 
     function make_footer_search_box(column) {
         let title = column.footer().textContent;
-        const sval = column.search();
-        column.search('');
+        const sval = (column.index() == 1) ? 'Available' : '';
+        column.search(sval);
 
         // Create input element
         let input = document.createElement('input');
@@ -212,6 +212,12 @@
             const search_term = is_active ? "PELNOCONFLICTS" : "";
             column.search(search_term).draw();
         });
+        $$('#show-full').on('click', function () {
+            const is_active = $$(this).hasClass("active");
+            var column = table.column(1);
+            const search_term = is_active ? "" : "Available";
+            column.search(search_term).draw();
+        });
         if (false) {
             $$('.show-day').on('click', function () {
                 const this_day = $$(this).data("day");
@@ -242,6 +248,7 @@ $column_toggles
 Special:<br/>
 <button type="button" class="btn btn-sm btn-toggle btn-outline-secondary" data-bs-toggle="button" aria-pressed="false" autocomplete="off" id="show-selected-only">Show Selected Only</button>
 <button type="button" class="btn btn-sm btn-toggle btn-outline-secondary" data-bs-toggle="button" aria-pressed="false" autocomplete="off" id="show-no-conflict">Hide Conflicts</button>
+<button type="button" class="btn btn-sm btn-toggle btn-outline-secondary" data-bs-toggle="button" aria-pressed="false" autocomplete="off" id="show-full">Show Full</button>
 </div>
 <!--
 <div class="btn-group" role="group" aria-label="Days">
