@@ -70077,6 +70077,37 @@
         });
     }
 
+    function make_migration_map() {
+        let migration_map = {};
+        for (key of Object.keys(events)) {
+            num = key.split("-")[1];
+            migration_map[num] = key;
+        }
+        return migration_map;
+    }
+
+    function migrate_selections(pel_selections) {
+        let fixed_selections = []
+        let migration_map = null;
+
+        for (old_event_id of pel_selections) {
+            if (old_event_id in events) {
+                fixed_selections.push(old_event_id);
+            } else {
+                if (migration_map === null) {
+                    migration_map = make_migration_map();
+                }
+                if (old_event_id in migration_map) {
+                    fixed_selections.push(migration_map[old_event_id])
+                }
+            }
+        }
+        if (JSON.stringify(fixed_selections) != JSON.stringify(pel_selections)) {
+            write_selections(fixed_selections);
+        }
+        return fixed_selections;
+    }
+
     function read_selections() {
         let pel_selections = null;
         const pel_selections_str = localStorage.getItem("pel-selections");
@@ -70119,10 +70150,12 @@
     }
 
     function init_selections() {
-        const pel_selections = read_selections();
+        let pel_selections = read_selections();
+        // let pel_selections = ["447","684","448","621","410","242"];
         if (pel_selections === null) {
             write_selections([]);
         } else {
+            pel_selections = migrate_selections(pel_selections);
             update_selections(pel_selections);
         }
 
